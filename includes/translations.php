@@ -86,7 +86,7 @@ return [
         'sw' => 'Mialiko ya Zabuni',
     ],
     'nav.publications.communicates' => [
-        'en' => 'Communiqués',
+        'en' => 'Communicates',
         'sw' => 'Taarifa',
     ],
     'nav.gallery' => [

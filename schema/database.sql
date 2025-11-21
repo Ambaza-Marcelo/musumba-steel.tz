@@ -50,7 +50,7 @@ VALUES
 ('national-holidays', 'publications', 'National Holidays', 'Sikukuu za Kitaifa', 'Public holiday notices.', 'Taarifa za sikukuu.', '', ''),
 ('international-holidays', 'publications', 'International Holidays', 'Sikukuu za Kimataifa', 'International observances.', 'Maadhimisho ya kimataifa.', '', ''),
 ('calls-for-tenders', 'publications', 'Calls for Tenders', 'Mialiko ya Zabuni', 'Procurement opportunities.', 'Fursa za manunuzi.', '', ''),
-('communicates', 'publications', 'Communiqués', 'Taarifa', 'Press releases and statements.', 'Taarifa kwa vyombo vya habari.', '', ''),
+('communicates', 'publications', 'Communicates', 'Taarifa', 'Press releases and statements.', 'Taarifa kwa vyombo vya habari.', '', ''),
 ('general-management', 'contact', 'General Management', 'Usimamizi Mkuu', 'Reach the executive office.', 'Wasiliana na ofisi ya utendaji.', '', ''),
 ('sales-management', 'contact', 'Sales Management', 'Idara ya Mauzo', 'Talk to national account managers.', 'Zungumza na mameneja wa mauzo.', '', '')
 ON DUPLICATE KEY UPDATE title_en = VALUES(title_en);
@@ -121,8 +121,8 @@ CREATE TABLE IF NOT EXISTS contacts (
 
 INSERT INTO contacts (department, name, position, email, phone, priority)
 VALUES
-('general-management', 'Yvonne Kweka', 'Managing Director', 'md@musumbasteel.co.tz', '+255 22 2000 111', 1),
-('sales-management', 'Bakari Mussa', 'Head of Sales', 'sales@musumbasteel.co.tz', '+255 757 000 222', 1)
+('general-management', 'Albert Uwiragiye', 'Managing Director', 'md@musumbasteel.co.tz', '+255 766 280 903', 1),
+('sales-management', 'M S. Tz', 'Head of Sales', 'musumbasteeltanzanialimited@gmail.com', '+255 741 497 470', 1)
 ON DUPLICATE KEY UPDATE email = VALUES(email);
 
 CREATE TABLE IF NOT EXISTS visitors (
