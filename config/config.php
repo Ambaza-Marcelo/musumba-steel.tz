@@ -7,9 +7,9 @@ declare(strict_types=1);
  */
 
 const DB_HOST = '127.0.0.1';
-const DB_NAME = 'u727805234_musumbasteeltz';
-const DB_USER = 'u727805234_musumbasteeltz';
-const DB_PASS = 'MusumbaSteel@2025TZ!';
+const DB_NAME = 'musumbasteeltz';
+const DB_USER = 'root';
+const DB_PASS = '';
 
 /**
  * Create and return a mysqli connection.

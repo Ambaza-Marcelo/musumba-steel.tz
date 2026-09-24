@@ -1,0 +1,10 @@
+# Site entry — keep permissive so legitimate visitors are not blocked by directory rules.
+DirectoryIndex index.php index.html
+
+<IfModule mod_authz_core.c>
+    Require all granted
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+</IfModule>

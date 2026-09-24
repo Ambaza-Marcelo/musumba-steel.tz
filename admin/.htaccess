@@ -1,0 +1,6 @@
+# Admin entry — /admin and /admin/ must resolve to login.
+DirectoryIndex index.php login.php
+
+<IfModule mod_authz_core.c>
+    Require all granted
+</IfModule>

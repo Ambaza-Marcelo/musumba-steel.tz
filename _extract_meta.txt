@@ -1,0 +1,26 @@
+==== COMPANY  PROFILE-MUSUMBA STEEL 26.docx ====
+chars: 4633
+heading-like styles:
+  Heading2: MUSUMBA HOLDING
+  Heading3: MUSUMBA RANGI MAX +MUSUMBA RANGI MAX +MUSUMBA RANGI MAXMUSUMBA RANGI MAXTECHNICAL PARAMETERS
+  Heading1: MANUFACTURING PLANT
+  Heading4: FROM SHINYANGA, 109 KM
+tables: 3
+  table 1: 2 rows x 1 cols
+    MUSUMBA | STEEL
+    TANZANIA LTD
+  table 2: 3 rows x 1 cols
+    16*16 - 20*20 - 25*25 - 30*30 | 40*40 - 50*50
+    40*20 - 40*25 - 50*25 - 60*40
+    20 - 25 - 32 - 38 - 42 - 48 | 60 - 76
+  table 3: 5 rows x 2 cols
+    KA H AM A F ACT O RY BOARD LINE || + 255 781 502260
+    CO R PO R AT E SALES OFFICE || + 255 761 037271
+     || 
+     || 
+     || 
+
+==== Website Improvement document 26.docx ====
+chars: 3077
+heading-like styles:
+tables: 0

@@ -2,8 +2,12 @@
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
+require_once __DIR__ . '/../includes/upload.php';
+
+ensureMediaSchema();
 
 $lang = currentLang();
+$error = '';
 
 $services = getServices();
 $editing = null;
@@ -14,28 +18,47 @@ if (isset($_GET['id'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $payload = [
-        $_POST['name_en'],
-        $_POST['name_sw'],
-        $_POST['description_en'],
-        $_POST['description_sw'],
-        $_POST['category'],
-    ];
+    try {
+        $payload = [
+            $_POST['name_en'],
+            $_POST['name_sw'],
+            $_POST['description_en'],
+            $_POST['description_sw'],
+            $_POST['category'],
+        ];
 
-    if (!empty($_POST['id'])) {
-        query(
-            'UPDATE services SET name_en=?, name_sw=?, description_en=?, description_sw=?, category=? WHERE id=?',
-            [...$payload, (int) $_POST['id']]
-        );
-    } else {
-        query(
-            'INSERT INTO services (name_en, name_sw, description_en, description_sw, category) VALUES (?,?,?,?,?)',
-            $payload
-        );
+        $imagePath = null;
+        if (!empty($_FILES['image']['name'])) {
+            $imagePath = uploadImage($_FILES['image'], 'products');
+        }
+
+        if (!empty($_POST['id'])) {
+            $id = (int) $_POST['id'];
+            if ($imagePath) {
+                $old = query('SELECT image_path FROM services WHERE id = ?', [$id])->fetch_assoc();
+                deleteMediaFile($old['image_path'] ?? null);
+                query(
+                    'UPDATE services SET name_en=?, name_sw=?, description_en=?, description_sw=?, category=?, image_path=? WHERE id=?',
+                    [...$payload, $imagePath, $id]
+                );
+            } else {
+                query(
+                    'UPDATE services SET name_en=?, name_sw=?, description_en=?, description_sw=?, category=? WHERE id=?',
+                    [...$payload, $id]
+                );
+            }
+        } else {
+            query(
+                'INSERT INTO services (name_en, name_sw, description_en, description_sw, category, image_path) VALUES (?,?,?,?,?,?)',
+                [...$payload, $imagePath]
+            );
+        }
+
+        header('Location: services.php?lang=' . currentLang());
+        exit;
+    } catch (Throwable $e) {
+        $error = $e->getMessage();
     }
-
-    header('Location: services.php?lang=' . currentLang());
-    exit;
 }
 
 ?>
@@ -263,6 +286,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <a href="dashboard.php?lang=<?= $lang; ?>"><?= t('admin.dashboard'); ?></a>
             <a href="pages.php?lang=<?= $lang; ?>"><?= t('admin.pages'); ?></a>
             <a href="services.php?lang=<?= $lang; ?>" style="background: var(--primary); color: #111;"><?= t('admin.services'); ?></a>
+            <a href="homepage.php?lang=<?= $lang; ?>">Homepage Media</a>
             <a href="projects.php?lang=<?= $lang; ?>"><?= t('admin.projects'); ?></a>
             <a href="publications.php?lang=<?= $lang; ?>"><?= t('admin.publications'); ?></a>
             <a href="pictures.php?lang=<?= $lang; ?>"><?= t('admin.pictures'); ?></a>
@@ -306,7 +330,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <section class="dashboard-section">
             <h2><?= $editing ? t('admin.edit_service') : t('admin.new_service'); ?></h2>
-        <form method="post">
+            <?php if (!empty($error)): ?><p style="color:#b00020"><?= htmlspecialchars($error); ?></p><?php endif; ?>
+        <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="id" value="<?= $editing['id'] ?? ''; ?>">
                 <div class="form-grid">
             <label>
@@ -328,9 +353,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <label>
                         <?= t('admin.category'); ?>
                 <select name="category" required>
-                    <option value="roofings" <?= (($editing['category'] ?? '') === 'roofings') ? 'selected' : ''; ?>>Roofings</option>
-                    <option value="construction-materials" <?= (($editing['category'] ?? '') === 'construction-materials') ? 'selected' : ''; ?>>Construction Materials</option>
+                    <?php
+                    $cats = [
+                        'residential-roofing' => 'Residential Roofing',
+                        'industrial-roofing' => 'Industrial Roofing',
+                        'flashings' => 'Flashings',
+                        'pipes-tubes' => 'Pipes & Tubes',
+                        'coated-steel' => 'Coated Steel',
+                        'roofings' => 'Roofings',
+                        'construction-materials' => 'Construction Materials',
+                    ];
+                    $cur = $editing['category'] ?? 'residential-roofing';
+                    foreach ($cats as $val => $label):
+                    ?>
+                    <option value="<?= $val; ?>" <?= $cur === $val ? 'selected' : ''; ?>><?= $label; ?></option>
+                    <?php endforeach; ?>
                 </select>
+            </label>
+            <label class="form-full-width">
+                Product image
+                <input type="file" name="image" accept="image/jpeg,image/png,image/webp,image/gif">
+                <?php if (!empty($editing['image_path']) && mediaUrl($editing['image_path'])): ?>
+                    <img src="../<?= htmlspecialchars(mediaUrl($editing['image_path'])); ?>" alt="" style="max-width:160px;margin-top:.5rem;display:block;border-radius:6px">
+                <?php endif; ?>
             </label>
                 </div>
                 <button class="btn primary" type="submit"><?= t('admin.save'); ?></button>

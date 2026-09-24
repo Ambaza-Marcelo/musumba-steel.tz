@@ -29,6 +29,9 @@ Static labels live in `includes/translations.php`. Dynamic content carries `*_en
 - `assets/`: styles, scripts, images.
 
 ## Notes
-- Language preference stored in session; toggle via header links.
-- Responsive navigation replicates the Burundi Backbone reference layout and uses brand colors from the provided logo.
+- Language preference stored in session; toggle via header links (EN / SW).
+- Public site layout inspired by industrial catalogue sites (contact strip, product center sidebar, floating quick-contact dock).
+- Brand content sourced from the 2026 company profile and website improvement sheet (Kahama plant, Musumba Holding, product range).
+- After pulling content updates, run: `mysql -u root musumbasteeltz < schema/update_content_2026.sql`
+- Responsive navigation; brand colours: steel blue + gold.
 

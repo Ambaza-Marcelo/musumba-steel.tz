@@ -329,12 +329,16 @@ try {
             <a href="dashboard.php?lang=<?= $lang; ?>"><?= t('admin.dashboard'); ?></a>
             <a href="pages.php?lang=<?= $lang; ?>"><?= t('admin.pages'); ?></a>
             <a href="services.php?lang=<?= $lang; ?>"><?= t('admin.services'); ?></a>
+            <a href="homepage.php?lang=<?= $lang; ?>">Homepage Media</a>
+            <a href="partners.php?lang=<?= $lang; ?>">Partners</a>
+            <a href="testimonials.php?lang=<?= $lang; ?>">Google Reviews</a>
             <a href="projects.php?lang=<?= $lang; ?>"><?= t('admin.projects'); ?></a>
             <a href="publications.php?lang=<?= $lang; ?>"><?= t('admin.publications'); ?></a>
             <a href="pictures.php?lang=<?= $lang; ?>"><?= t('admin.pictures'); ?></a>
             <a href="videos.php?lang=<?= $lang; ?>"><?= t('admin.videos'); ?></a>
             <a href="contacts.php?lang=<?= $lang; ?>"><?= t('admin.contacts'); ?></a>
             <a href="users.php?lang=<?= $lang; ?>"><?= t('admin.users'); ?></a>
+            <a href="backup.php"><?= t('admin.backup'); ?></a>
             <a href="logout.php"><?= t('admin.logout'); ?></a>
         </nav>
     </div>
@@ -382,6 +386,8 @@ try {
                     <a href="projects.php?lang=<?= $lang; ?>" class="action-btn"><?= t('admin.manage_projects'); ?></a>
                     <a href="publications.php?lang=<?= $lang; ?>" class="action-btn"><?= t('admin.manage_publications'); ?></a>
                     <a href="contacts.php?lang=<?= $lang; ?>" class="action-btn secondary"><?= t('admin.manage_contacts'); ?></a>
+                    <a href="backup.php" class="action-btn secondary"><?= t('admin.download_backup'); ?></a>
+                    <a href="migrate_mabati.php" class="action-btn secondary">Rebuild Mabati structure</a>
                 </div>
             </section>
 

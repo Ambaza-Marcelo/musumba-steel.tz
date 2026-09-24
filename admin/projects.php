@@ -2,8 +2,12 @@
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
+require_once __DIR__ . '/../includes/upload.php';
+
+ensureMediaSchema();
 
 $lang = currentLang();
+$error = '';
 
 $projects = getProjects();
 $editing = null;
@@ -14,30 +18,49 @@ if (isset($_GET['id'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $payload = [
-        $_POST['title_en'],
-        $_POST['title_sw'],
-        $_POST['summary_en'],
-        $_POST['summary_sw'],
-        $_POST['location'],
-        $_POST['status'],
-        $_POST['launched_on'],
-    ];
+    try {
+        $payload = [
+            $_POST['title_en'],
+            $_POST['title_sw'],
+            $_POST['summary_en'],
+            $_POST['summary_sw'],
+            $_POST['location'],
+            $_POST['status'],
+            $_POST['launched_on'],
+        ];
 
-    if (!empty($_POST['id'])) {
-        query(
-            'UPDATE projects SET title_en=?, title_sw=?, summary_en=?, summary_sw=?, location=?, status=?, launched_on=? WHERE id=?',
-            [...$payload, (int) $_POST['id']]
-        );
-    } else {
-        query(
-            'INSERT INTO projects (title_en, title_sw, summary_en, summary_sw, location, status, launched_on) VALUES (?,?,?,?,?,?,?)',
-            $payload
-        );
+        $imagePath = null;
+        if (!empty($_FILES['image']['name'])) {
+            $imagePath = uploadImage($_FILES['image'], 'projects');
+        }
+
+        if (!empty($_POST['id'])) {
+            $id = (int) $_POST['id'];
+            if ($imagePath) {
+                $old = query('SELECT image_path FROM projects WHERE id = ?', [$id])->fetch_assoc();
+                deleteMediaFile($old['image_path'] ?? null);
+                query(
+                    'UPDATE projects SET title_en=?, title_sw=?, summary_en=?, summary_sw=?, location=?, status=?, launched_on=?, image_path=? WHERE id=?',
+                    [...$payload, $imagePath, $id]
+                );
+            } else {
+                query(
+                    'UPDATE projects SET title_en=?, title_sw=?, summary_en=?, summary_sw=?, location=?, status=?, launched_on=? WHERE id=?',
+                    [...$payload, $id]
+                );
+            }
+        } else {
+            query(
+                'INSERT INTO projects (title_en, title_sw, summary_en, summary_sw, location, status, launched_on, image_path) VALUES (?,?,?,?,?,?,?,?)',
+                [...$payload, $imagePath]
+            );
+        }
+
+        header('Location: projects.php?lang=' . currentLang());
+        exit;
+    } catch (Throwable $e) {
+        $error = $e->getMessage();
     }
-
-    header('Location: projects.php?lang=' . currentLang());
-    exit;
 }
 
 ?>
@@ -267,6 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <a href="dashboard.php?lang=<?= $lang; ?>"><?= t('admin.dashboard'); ?></a>
             <a href="pages.php?lang=<?= $lang; ?>"><?= t('admin.pages'); ?></a>
             <a href="services.php?lang=<?= $lang; ?>"><?= t('admin.services'); ?></a>
+            <a href="homepage.php?lang=<?= $lang; ?>">Homepage Media</a>
             <a href="projects.php?lang=<?= $lang; ?>" style="background: var(--primary); color: #111;"><?= t('admin.projects'); ?></a>
             <a href="publications.php?lang=<?= $lang; ?>"><?= t('admin.publications'); ?></a>
             <a href="pictures.php?lang=<?= $lang; ?>"><?= t('admin.pictures'); ?></a>
@@ -312,7 +336,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <section class="dashboard-section">
             <h2><?= $editing ? t('admin.edit_project') : t('admin.new_project'); ?></h2>
-        <form method="post">
+            <?php if (!empty($error)): ?><p style="color:#b00020"><?= htmlspecialchars($error); ?></p><?php endif; ?>
+        <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="id" value="<?= $editing['id'] ?? ''; ?>">
                 <div class="form-grid">
             <label>
@@ -349,6 +374,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <label>
                         <?= t('admin.launch_date'); ?>
                 <input type="date" name="launched_on" value="<?= htmlspecialchars($editing['launched_on'] ?? date('Y-m-d')); ?>">
+            </label>
+            <label class="form-full-width">
+                Project image
+                <input type="file" name="image" accept="image/jpeg,image/png,image/webp,image/gif">
+                <?php if (!empty($editing['image_path']) && mediaUrl($editing['image_path'])): ?>
+                    <img src="../<?= htmlspecialchars(mediaUrl($editing['image_path'])); ?>" alt="" style="max-width:160px;margin-top:.5rem;display:block;border-radius:6px">
+                <?php endif; ?>
             </label>
                 </div>
                 <button class="btn primary" type="submit"><?= t('admin.save'); ?></button>
