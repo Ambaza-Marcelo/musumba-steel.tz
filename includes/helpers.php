@@ -4,8 +4,18 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/upload.php';
+require_once __DIR__ . '/configurator.php';
 
 if (session_status() === PHP_SESSION_NONE) {
+    @ini_set('session.use_strict_mode', '1');
+    @ini_set('session.use_only_cookies', '1');
+    @ini_set('session.cookie_httponly', '1');
+    if (PHP_VERSION_ID >= 70300) {
+        @ini_set('session.cookie_samesite', 'Lax');
+    }
+    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        @ini_set('session.cookie_secure', '1');
+    }
     session_start();
 }
 
@@ -14,6 +24,63 @@ try {
     ensureMediaSchema();
 } catch (Throwable $e) {
     // ignore on first boot if DB not ready
+}
+
+try {
+    ensureConfiguratorSchema();
+} catch (Throwable $e) {
+    // ignore
+}
+
+try {
+    ensureAdminSchema();
+} catch (Throwable $e) {
+    // ignore
+}
+
+/**
+ * Ensure users table has role column and backfill empty roles.
+ */
+function ensureAdminSchema(): void
+{
+    try {
+        $db = db();
+        @$db->query("CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(190) NOT NULL UNIQUE,
+            password_hash VARCHAR(255) NOT NULL,
+            role ENUM('user','admin') NOT NULL DEFAULT 'admin',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        $col = @$db->query("SHOW COLUMNS FROM users LIKE 'role'");
+        if ($col && $col->num_rows === 0) {
+            @$db->query("ALTER TABLE users ADD COLUMN role ENUM('user','admin') NOT NULL DEFAULT 'admin' AFTER password_hash");
+        }
+
+        // Empty / NULL role → admin (legacy accounts)
+        @$db->query("UPDATE users SET role = 'admin' WHERE role IS NULL OR role = ''");
+    } catch (Throwable $e) {
+        error_log('ensureAdminSchema: ' . $e->getMessage());
+    }
+}
+
+/**
+ * CSRF token for admin AJAX forms.
+ */
+function csrfToken(): string
+{
+    if (empty($_SESSION['csrf_token']) || !is_string($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function verifyCsrf(?string $token): bool
+{
+    return is_string($token)
+        && !empty($_SESSION['csrf_token'])
+        && hash_equals($_SESSION['csrf_token'], $token);
 }
 
 $supportedLanguages = ['en', 'sw'];
@@ -64,38 +131,43 @@ function getPage(string $slug)
 /**
  * Fetch services optionally filtered by category (supports aliases).
  */
-function getServices(string $category = null): array
+function getServices(?string $category = null): array
 {
-    if (!$category) {
-        $result = query('SELECT * FROM services ORDER BY category, name_en');
+    try {
+        if (!$category) {
+            $result = query('SELECT * FROM services ORDER BY category, name_en');
+            return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+        }
+
+        $aliases = [
+            'residential-roofing' => ['residential-roofing', 'roofings'],
+            'industrial-roofing' => ['industrial-roofing'],
+            'pipes-tubes' => ['pipes-tubes', 'construction-materials'],
+            'flashings' => ['flashings'],
+            'coated-steel' => ['coated-steel', 'residential-roofing'],
+            'roofings' => ['residential-roofing', 'roofings'],
+            'construction-materials' => ['pipes-tubes', 'construction-materials'],
+        ];
+
+        $cats = $aliases[$category] ?? [$category];
+
+        if ($category === 'coated-steel') {
+            $result = query(
+                "SELECT * FROM services WHERE category IN ('residential-roofing','coated-steel')
+                 AND (name_en LIKE '%Alu-Zinc%' OR name_en LIKE '%Pre-Painted%' OR name_en LIKE '%Rangi Max%' OR name_en LIKE '%Colour%' OR name_en LIKE '%Color%')
+                 ORDER BY name_en"
+            );
+            return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($cats), '?'));
+        $result = query("SELECT * FROM services WHERE category IN ($placeholders) ORDER BY name_en", $cats);
+
         return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+    } catch (Throwable $e) {
+        error_log('getServices: ' . $e->getMessage());
+        return [];
     }
-
-    $aliases = [
-        'residential-roofing' => ['residential-roofing', 'roofings'],
-        'industrial-roofing' => ['industrial-roofing'],
-        'pipes-tubes' => ['pipes-tubes', 'construction-materials'],
-        'flashings' => ['flashings'],
-        'coated-steel' => ['coated-steel', 'residential-roofing'],
-        'roofings' => ['residential-roofing', 'roofings'],
-        'construction-materials' => ['pipes-tubes', 'construction-materials'],
-    ];
-
-    $cats = $aliases[$category] ?? [$category];
-
-    if ($category === 'coated-steel') {
-        $result = query(
-            "SELECT * FROM services WHERE category IN ('residential-roofing','coated-steel')
-             AND (name_en LIKE '%Alu-Zinc%' OR name_en LIKE '%Pre-Painted%' OR name_en LIKE '%Rangi Max%' OR name_en LIKE '%Colour%' OR name_en LIKE '%Color%')
-             ORDER BY name_en"
-        );
-        return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
-    }
-
-    $placeholders = implode(',', array_fill(0, count($cats), '?'));
-    $result = query("SELECT * FROM services WHERE category IN ($placeholders) ORDER BY name_en", $cats);
-
-    return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
 }
 
 /**
@@ -103,23 +175,30 @@ function getServices(string $category = null): array
  */
 function getProjects(): array
 {
-    $result = query('SELECT * FROM projects ORDER BY launched_on DESC');
-
-    return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+    try {
+        $result = query('SELECT * FROM projects ORDER BY launched_on DESC');
+        return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+    } catch (Throwable $e) {
+        return [];
+    }
 }
 
 /**
  * Fetch publications filtered by type.
  */
-function getPublications(string $type = null): array
+function getPublications(?string $type = null): array
 {
-    if ($type) {
-        $result = query('SELECT * FROM publications WHERE type = ? ORDER BY published_on DESC', [$type]);
-    } else {
-        $result = query('SELECT * FROM publications ORDER BY published_on DESC');
-    }
+    try {
+        if ($type) {
+            $result = query('SELECT * FROM publications WHERE type = ? ORDER BY published_on DESC', [$type]);
+        } else {
+            $result = query('SELECT * FROM publications ORDER BY published_on DESC');
+        }
 
-    return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+        return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+    } catch (Throwable $e) {
+        return [];
+    }
 }
 
 /**
@@ -134,15 +213,19 @@ function getPublicationImages(int $publicationId): array
 /**
  * Fetch contact entries filtered by department.
  */
-function getContacts(string $department = null): array
+function getContacts(?string $department = null): array
 {
-    if ($department) {
-        $result = query('SELECT * FROM contacts WHERE department = ? ORDER BY priority', [$department]);
-    } else {
-        $result = query('SELECT * FROM contacts ORDER BY department, priority');
-    }
+    try {
+        if ($department) {
+            $result = query('SELECT * FROM contacts WHERE department = ? ORDER BY priority', [$department]);
+        } else {
+            $result = query('SELECT * FROM contacts ORDER BY department, priority');
+        }
 
-    return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+        return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+    } catch (Throwable $e) {
+        return [];
+    }
 }
 
 /**
@@ -150,8 +233,12 @@ function getContacts(string $department = null): array
  */
 function getPictures(): array
 {
-    $result = query('SELECT * FROM pictures ORDER BY display_order, created_at DESC');
-    return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+    try {
+        $result = query('SELECT * FROM pictures ORDER BY display_order, created_at DESC');
+        return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+    } catch (Throwable $e) {
+        return [];
+    }
 }
 
 /**
@@ -159,8 +246,12 @@ function getPictures(): array
  */
 function getVideos(): array
 {
-    $result = query('SELECT * FROM videos ORDER BY display_order, created_at DESC');
-    return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+    try {
+        $result = query('SELECT * FROM videos ORDER BY display_order, created_at DESC');
+        return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+    } catch (Throwable $e) {
+        return [];
+    }
 }
 
 /**

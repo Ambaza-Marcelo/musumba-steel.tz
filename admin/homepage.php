@@ -2,26 +2,19 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/../includes/helpers.php';
-require_once __DIR__ . '/../includes/upload.php';
+require_once __DIR__ . '/includes/bootstrap.php';
 
-ensureMediaSchema();
-
-$lang = currentLang();
 $message = '';
 $error = '';
 
 // Clear broken hardcoded media paths that are not real files
 try {
     foreach (['home_slides', 'home_help_cards'] as $table) {
-        $slidesCheck = query("SELECT id, image_path FROM {$table}");
-        if ($slidesCheck) {
-            while ($row = $slidesCheck->fetch_assoc()) {
-                $p = (string) ($row['image_path'] ?? '');
-                if ($p !== '' && !mediaExists($p)) {
-                    query("UPDATE {$table} SET image_path = NULL WHERE id = ?", [(int) $row['id']]);
-                }
+        $rows = adminFetchAll("SELECT id, image_path FROM {$table}");
+        foreach ($rows as $row) {
+            $p = (string) ($row['image_path'] ?? '');
+            if ($p !== '' && !mediaExists($p)) {
+                query("UPDATE {$table} SET image_path = '' WHERE id = ?", [(int) $row['id']]);
             }
         }
     }
@@ -50,30 +43,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('Slide titles (EN/SW) are required.');
             }
 
-            $imagePath = null;
+            $imagePath = '';
             if (!empty($_FILES['image']['name'])) {
-                $imagePath = uploadImage($_FILES['image'], 'slides');
+                $imagePath = uploadImage($_FILES['image'], 'slides') ?: '';
             }
 
             if ($id > 0) {
-                if ($imagePath) {
-                    $old = query('SELECT image_path FROM home_slides WHERE id = ?', [$id])->fetch_assoc();
+                if ($imagePath !== '') {
+                    $old = adminFetchOne('SELECT image_path FROM home_slides WHERE id = ?', [$id]);
                     deleteMediaFile($old['image_path'] ?? null);
                     query(
                         'UPDATE home_slides SET title_en=?, title_sw=?, subtitle_en=?, subtitle_sw=?, cta_label_en=?, cta_label_sw=?, cta_url=?, sort_order=?, is_active=?, image_path=? WHERE id=?',
-                        [...$fields, $imagePath, $id]
+                        adminParams([...$fields, $imagePath, $id])
                     );
                 } else {
                     query(
                         'UPDATE home_slides SET title_en=?, title_sw=?, subtitle_en=?, subtitle_sw=?, cta_label_en=?, cta_label_sw=?, cta_url=?, sort_order=?, is_active=? WHERE id=?',
-                        [...$fields, $id]
+                        adminParams([...$fields, $id])
                     );
                 }
             } else {
                 query(
                     'INSERT INTO home_slides (title_en, title_sw, subtitle_en, subtitle_sw, cta_label_en, cta_label_sw, cta_url, sort_order, is_active, image_path)
                      VALUES (?,?,?,?,?,?,?,?,?,?)',
-                    [...$fields, $imagePath]
+                    adminParams([...$fields, $imagePath])
                 );
             }
             $message = 'Slide saved.';
@@ -81,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($action === 'delete_slide') {
             $id = (int) ($_POST['id'] ?? 0);
-            $old = query('SELECT image_path FROM home_slides WHERE id = ?', [$id])->fetch_assoc();
+            $old = adminFetchOne('SELECT image_path FROM home_slides WHERE id = ?', [$id]);
             deleteMediaFile($old['image_path'] ?? null);
             query('DELETE FROM home_slides WHERE id = ?', [$id]);
             $message = 'Slide deleted.';
@@ -104,30 +97,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('Card titles (EN/SW) are required.');
             }
 
-            $imagePath = null;
+            $imagePath = '';
             if (!empty($_FILES['image']['name'])) {
-                $imagePath = uploadImage($_FILES['image'], 'help');
+                $imagePath = uploadImage($_FILES['image'], 'help') ?: '';
             }
 
             if ($id > 0) {
-                if ($imagePath) {
-                    $old = query('SELECT image_path FROM home_help_cards WHERE id = ?', [$id])->fetch_assoc();
+                if ($imagePath !== '') {
+                    $old = adminFetchOne('SELECT image_path FROM home_help_cards WHERE id = ?', [$id]);
                     deleteMediaFile($old['image_path'] ?? null);
                     query(
                         'UPDATE home_help_cards SET title_en=?, title_sw=?, body_en=?, body_sw=?, link_url=?, link_label_en=?, link_label_sw=?, sort_order=?, is_active=?, image_path=? WHERE id=?',
-                        [...$fields, $imagePath, $id]
+                        adminParams([...$fields, $imagePath, $id])
                     );
                 } else {
                     query(
                         'UPDATE home_help_cards SET title_en=?, title_sw=?, body_en=?, body_sw=?, link_url=?, link_label_en=?, link_label_sw=?, sort_order=?, is_active=? WHERE id=?',
-                        [...$fields, $id]
+                        adminParams([...$fields, $id])
                     );
                 }
             } else {
                 query(
                     'INSERT INTO home_help_cards (title_en, title_sw, body_en, body_sw, link_url, link_label_en, link_label_sw, sort_order, is_active, image_path)
                      VALUES (?,?,?,?,?,?,?,?,?,?)',
-                    [...$fields, $imagePath]
+                    adminParams([...$fields, $imagePath])
                 );
             }
             $message = 'Help card saved.';
@@ -135,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($action === 'delete_card') {
             $id = (int) ($_POST['id'] ?? 0);
-            $old = query('SELECT image_path FROM home_help_cards WHERE id = ?', [$id])->fetch_assoc();
+            $old = adminFetchOne('SELECT image_path FROM home_help_cards WHERE id = ?', [$id]);
             deleteMediaFile($old['image_path'] ?? null);
             query('DELETE FROM home_help_cards WHERE id = ?', [$id]);
             $message = 'Help card deleted.';
@@ -171,26 +164,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$slides = [];
-$cards = [];
-try {
-    $r = query('SELECT * FROM home_slides ORDER BY sort_order, id');
-    $slides = $r ? $r->fetch_all(MYSQLI_ASSOC) : [];
-    $r = query('SELECT * FROM home_help_cards ORDER BY sort_order, id');
-    $cards = $r ? $r->fetch_all(MYSQLI_ASSOC) : [];
-} catch (Throwable $e) {
-    $error = $error ?: $e->getMessage();
-}
+$slides = adminFetchAll('SELECT * FROM home_slides ORDER BY sort_order, id');
+$cards = adminFetchAll('SELECT * FROM home_help_cards ORDER BY sort_order, id');
 
 $editSlide = null;
 $editCard = null;
 if (isset($_GET['slide'])) {
-    $r = query('SELECT * FROM home_slides WHERE id = ?', [(int) $_GET['slide']]);
-    $editSlide = $r ? $r->fetch_assoc() : null;
+    $editSlide = adminFetchOne('SELECT * FROM home_slides WHERE id = ?', [(int) $_GET['slide']]);
 }
 if (isset($_GET['card'])) {
-    $r = query('SELECT * FROM home_help_cards WHERE id = ?', [(int) $_GET['card']]);
-    $editCard = $r ? $r->fetch_assoc() : null;
+    $editCard = adminFetchOne('SELECT * FROM home_help_cards WHERE id = ?', [(int) $_GET['card']]);
 }
 
 $logo = getSetting('site_logo');

@@ -59,14 +59,34 @@ function uploadImage(array $file, string $subdir = 'general'): string
     }
 
     $allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
-    $mime = $finfo->file($file['tmp_name']) ?: ($file['type'] ?? '');
+    $mime = '';
+    if (class_exists('finfo')) {
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mime = (string) ($finfo->file($file['tmp_name']) ?: '');
+    }
+    if ($mime === '') {
+        $mime = (string) ($file['type'] ?? '');
+    }
+    // Fallback by extension when host blocks finfo
+    if ($mime === '' || !in_array($mime, $allowed, true)) {
+        $ext = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
+        $extMapMime = [
+            'jpg' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+        ];
+        if (isset($extMapMime[$ext])) {
+            $mime = $extMapMime[$ext];
+        }
+    }
     if (!in_array($mime, $allowed, true)) {
         throw new RuntimeException('Invalid file type. Use JPG, PNG, GIF or WEBP.');
     }
 
-    if (($file['size'] ?? 0) > 10 * 1024 * 1024) {
-        throw new RuntimeException('File exceeds 10MB limit.');
+    if (($file['size'] ?? 0) > 20 * 1024 * 1024) {
+        throw new RuntimeException('File exceeds 20MB limit.');
     }
 
     $extMap = [
@@ -195,13 +215,16 @@ function ensureMediaSchema(): void
     @$db->query("CREATE TABLE IF NOT EXISTS partners (
         id INT AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
-        category ENUM('distributor','affiliation') NOT NULL DEFAULT 'distributor',
+        category VARCHAR(40) NOT NULL DEFAULT 'distributor',
         logo_path VARCHAR(500) DEFAULT NULL,
         website_url VARCHAR(500) DEFAULT NULL,
         sort_order INT DEFAULT 0,
         is_active TINYINT(1) DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // If an old ENUM category exists, widen to VARCHAR when possible
+    @$db->query("ALTER TABLE partners MODIFY category VARCHAR(40) NOT NULL DEFAULT 'distributor'");
 
     // Drop placeholder/demo testimonials that were never real Google reviews
     @$db->query("DELETE FROM testimonials WHERE source = 'google' AND quote_en LIKE 'Musumba Steel has been our first choice%'");

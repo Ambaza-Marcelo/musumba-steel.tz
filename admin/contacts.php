@@ -1,42 +1,55 @@
 <?php
 
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/../includes/helpers.php';
+declare(strict_types=1);
 
-$lang = currentLang();
+require_once __DIR__ . '/includes/bootstrap.php';
 
-$contacts = getContacts();
+$contacts = [];
 $editing = null;
+$error = null;
+
+try {
+    $contacts = getContacts() ?: [];
+} catch (Throwable $e) {
+    $contacts = [];
+}
 
 if (isset($_GET['id'])) {
-    $stmt = query('SELECT * FROM contacts WHERE id = ?', [(int) $_GET['id']]);
-    $editing = $stmt ? $stmt->fetch_assoc() : null;
+    $editing = adminFetchOne('SELECT * FROM contacts WHERE id = ?', [(int) $_GET['id']]);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $payload = [
-        $_POST['department'],
-        $_POST['name'],
-        $_POST['position'],
-        $_POST['email'],
-        $_POST['phone'],
-        $_POST['priority'] ?? 1,
-    ];
+    try {
+        $payload = [
+            trim((string) ($_POST['department'] ?? '')),
+            trim((string) ($_POST['name'] ?? '')),
+            trim((string) ($_POST['position'] ?? '')),
+            trim((string) ($_POST['email'] ?? '')),
+            trim((string) ($_POST['phone'] ?? '')),
+            (int) ($_POST['priority'] ?? 1),
+        ];
 
-    if (!empty($_POST['id'])) {
-        query(
-            'UPDATE contacts SET department=?, name=?, position=?, email=?, phone=?, priority=? WHERE id=?',
-            [...$payload, (int) $_POST['id']]
-        );
-    } else {
-        query(
-            'INSERT INTO contacts (department, name, position, email, phone, priority) VALUES (?,?,?,?,?,?)',
-            $payload
-        );
+        if ($payload[0] === '' || $payload[1] === '') {
+            throw new InvalidArgumentException('Department and name are required.');
+        }
+
+        if (!empty($_POST['id'])) {
+            query(
+                'UPDATE contacts SET department=?, name=?, position=?, email=?, phone=?, priority=? WHERE id=?',
+                adminParams([...$payload, (int) $_POST['id']])
+            );
+        } else {
+            query(
+                'INSERT INTO contacts (department, name, position, email, phone, priority) VALUES (?,?,?,?,?,?)',
+                adminParams($payload)
+            );
+        }
+
+        header('Location: contacts.php?lang=' . rawurlencode(currentLang()));
+        exit;
+    } catch (Throwable $e) {
+        $error = $e->getMessage();
     }
-
-    header('Location: contacts.php?lang=' . currentLang());
-    exit;
 }
 
 ?>
@@ -268,6 +281,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <div class="admin-layout">
+        <?php if (!empty($error)): ?>
+            <div style="background:#fee;color:#c00;padding:1rem;border-radius:6px;margin-bottom:1rem;"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></div>
+        <?php endif; ?>
         <section class="dashboard-section">
             <h2><?= t('admin.contacts_list'); ?></h2>
         <table>

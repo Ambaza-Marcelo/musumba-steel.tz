@@ -1,76 +1,51 @@
 <?php
 
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/../includes/helpers.php';
+declare(strict_types=1);
+
+require_once __DIR__ . '/includes/bootstrap.php';
 
 $user = currentUser();
-$lang = currentLang();
+$adminNavActive = 'dashboard';
 
 // Helper function to safely get count
 function getCount($table) {
     // Whitelist of allowed table names for security
-    $allowedTables = ['pages', 'services', 'projects', 'publications', 'contacts'];
+    $allowedTables = ['pages', 'services', 'projects', 'publications', 'contacts', 'products', 'partners', 'testimonials'];
     if (!in_array($table, $allowedTables, true)) {
         return 0;
     }
     
     try {
-        $result = query('SELECT COUNT(*) as total FROM `' . $table . '`');
-        if ($result && $row = $result->fetch_assoc()) {
-            return (int) $row['total'];
-        }
-    } catch (Exception $e) {
-        // Table might not exist yet, return 0
+        $row = adminFetchOne('SELECT COUNT(*) as total FROM `' . $table . '`');
+        return $row ? (int) $row['total'] : 0;
+    } catch (Throwable $e) {
         return 0;
     }
-    return 0;
 }
 
 $stats = [
     'pages' => getCount('pages'),
     'services' => getCount('services'),
+    'products' => getCount('products'),
     'projects' => getCount('projects'),
     'publications' => getCount('publications'),
     'contacts' => getCount('contacts'),
 ];
 
 // Get recent publications
-$recentPubs = [];
-try {
-    $recentPublications = query('SELECT title_en, published_on, type FROM publications ORDER BY published_on DESC LIMIT 5');
-    if ($recentPublications && is_object($recentPublications)) {
-        $data = $recentPublications->fetch_all(MYSQLI_ASSOC);
-        $recentPubs = $data ?: [];
-    }
-} catch (Exception $e) {
-    // Table might not exist yet, use empty array
-    $recentPubs = [];
-}
+$recentPubs = adminFetchAll('SELECT title_en, published_on, type FROM publications ORDER BY published_on DESC LIMIT 5');
 
 // Get visitor statistics
 $visitorsOnline = 0;
 $visitorsByCountry = [];
 $visitorsByRegion = [];
 try {
-    // Count visitors online (active in last 5 minutes)
-    $onlineResult = query('SELECT COUNT(DISTINCT ip_address) as total FROM visitors WHERE last_activity > DATE_SUB(NOW(), INTERVAL 5 MINUTE)');
-    if ($onlineResult && $row = $onlineResult->fetch_assoc()) {
-        $visitorsOnline = (int) $row['total'];
-    }
-    
-    // Get visitors by country
-    $countryResult = query('SELECT country, COUNT(*) as count FROM visitors WHERE country IS NOT NULL AND country != "" GROUP BY country ORDER BY count DESC LIMIT 10');
-    if ($countryResult) {
-        $visitorsByCountry = $countryResult->fetch_all(MYSQLI_ASSOC);
-    }
-    
-    // Get visitors by region
-    $regionResult = query('SELECT region, country, COUNT(*) as count FROM visitors WHERE region IS NOT NULL AND region != "" GROUP BY region, country ORDER BY count DESC LIMIT 10');
-    if ($regionResult) {
-        $visitorsByRegion = $regionResult->fetch_all(MYSQLI_ASSOC);
-    }
-} catch (Exception $e) {
-    // Table might not exist yet
+    $onlineRow = adminFetchOne('SELECT COUNT(DISTINCT ip_address) as total FROM visitors WHERE last_activity > DATE_SUB(NOW(), INTERVAL 5 MINUTE)');
+    $visitorsOnline = $onlineRow ? (int) $onlineRow['total'] : 0;
+
+    $visitorsByCountry = adminFetchAll('SELECT country, COUNT(*) as count FROM visitors WHERE country IS NOT NULL AND country != "" GROUP BY country ORDER BY count DESC LIMIT 10');
+    $visitorsByRegion = adminFetchAll('SELECT region, country, COUNT(*) as count FROM visitors WHERE region IS NOT NULL AND region != "" GROUP BY region, country ORDER BY count DESC LIMIT 10');
+} catch (Throwable $e) {
     error_log('Visitor stats error: ' . $e->getMessage());
 }
 
@@ -325,22 +300,7 @@ try {
                 <a href="../index.php?lang=<?= $lang; ?>" style="color: white; text-decoration: none; padding: 0.6rem 1.2rem; background: rgba(255,255,255,0.1); border-radius: 6px;"><?= t('admin.view_site'); ?></a>
             </div>
         </div>
-        <nav class="admin-nav">
-            <a href="dashboard.php?lang=<?= $lang; ?>"><?= t('admin.dashboard'); ?></a>
-            <a href="pages.php?lang=<?= $lang; ?>"><?= t('admin.pages'); ?></a>
-            <a href="services.php?lang=<?= $lang; ?>"><?= t('admin.services'); ?></a>
-            <a href="homepage.php?lang=<?= $lang; ?>">Homepage Media</a>
-            <a href="partners.php?lang=<?= $lang; ?>">Partners</a>
-            <a href="testimonials.php?lang=<?= $lang; ?>">Google Reviews</a>
-            <a href="projects.php?lang=<?= $lang; ?>"><?= t('admin.projects'); ?></a>
-            <a href="publications.php?lang=<?= $lang; ?>"><?= t('admin.publications'); ?></a>
-            <a href="pictures.php?lang=<?= $lang; ?>"><?= t('admin.pictures'); ?></a>
-            <a href="videos.php?lang=<?= $lang; ?>"><?= t('admin.videos'); ?></a>
-            <a href="contacts.php?lang=<?= $lang; ?>"><?= t('admin.contacts'); ?></a>
-            <a href="users.php?lang=<?= $lang; ?>"><?= t('admin.users'); ?></a>
-            <a href="backup.php"><?= t('admin.backup'); ?></a>
-            <a href="logout.php"><?= t('admin.logout'); ?></a>
-        </nav>
+        <?php include __DIR__ . '/includes/nav.php'; ?>
     </div>
 
     <div class="admin-layout">
@@ -354,6 +314,11 @@ try {
                 <h3><?= t('admin.services'); ?></h3>
                 <p class="number"><?= $stats['services']; ?></p>
                 <p class="label"><?= t('admin.available_services'); ?></p>
+            </article>
+            <article class="stat-card">
+                <h3>Quote Products</h3>
+                <p class="number"><?= (int) ($stats['products'] ?? 0); ?></p>
+                <p class="label">Configurator profiles</p>
             </article>
             <article class="stat-card">
                 <h3><?= t('admin.projects'); ?></h3>

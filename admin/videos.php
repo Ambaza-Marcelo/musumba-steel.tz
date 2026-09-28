@@ -1,9 +1,10 @@
 <?php
 
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/../includes/helpers.php';
+declare(strict_types=1);
 
-$lang = currentLang();
+require_once __DIR__ . '/includes/bootstrap.php';
+
+$error = null;
 
 /**
  * Normalize a YouTube ID or URL into the 11-character video ID.
@@ -30,25 +31,31 @@ function normalizeYoutubeId(?string $value): ?string
     return null;
 }
 
-$videos = getVideos();
-$editing = null;
+$videos = [];
+try {
+    $videos = getVideos() ?: [];
+} catch (Throwable $e) {
+    $videos = [];
+}
 
+$editing = null;
 if (isset($_GET['id'])) {
-    $stmt = query('SELECT * FROM videos WHERE id = ?', [(int) $_GET['id']]);
-    $editing = $stmt ? $stmt->fetch_assoc() : null;
+    $editing = adminFetchOne('SELECT * FROM videos WHERE id = ?', [(int) $_GET['id']]);
 }
 
 // Handle deletion
 if (isset($_GET['delete'])) {
-    $videoId = (int) $_GET['delete'];
-    query('DELETE FROM videos WHERE id = ?', [$videoId]);
-    header('Location: videos.php?lang=' . $lang);
-    exit;
+    try {
+        $videoId = (int) $_GET['delete'];
+        query('DELETE FROM videos WHERE id = ?', [$videoId]);
+        header('Location: videos.php?lang=' . $lang);
+        exit;
+    } catch (Throwable $e) {
+        $error = $e->getMessage();
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $error = null;
-    
     try {
         $youtubeIdInput = trim($_POST['youtube_id'] ?? '');
         $baseOrder = (int) ($_POST['display_order'] ?? 0);
@@ -67,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             query(
                 'UPDATE videos SET youtube_id=?, display_order=? WHERE id=?',
-                [$youtubeId, $baseOrder, $videoId]
+                adminParams([$youtubeId, $baseOrder, $videoId])
             );
         } else {
             // Create new video(s)
@@ -92,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($youtubeIds as $ytId) {
                 query(
                     'INSERT INTO videos (youtube_id, display_order) VALUES (?, ?)',
-                    [$ytId, $baseOrder + $youtubeCount]
+                    adminParams([$ytId, $baseOrder + $youtubeCount])
                 );
                 $youtubeCount++;
             }
@@ -108,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         header('Location: videos.php?lang=' . $lang);
         exit;
-    } catch (Exception $e) {
+    } catch (Throwable $e) {
         $error = t('admin.error_occurred') . ' ' . $e->getMessage();
     }
 }

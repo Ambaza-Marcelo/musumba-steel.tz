@@ -1,62 +1,63 @@
 <?php
 
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/../includes/helpers.php';
-require_once __DIR__ . '/../includes/upload.php';
+declare(strict_types=1);
 
-ensureMediaSchema();
+require_once __DIR__ . '/includes/bootstrap.php';
 
-$lang = currentLang();
 $error = '';
-
-$projects = getProjects();
+$projects = [];
 $editing = null;
 
+try {
+    $projects = getProjects() ?: [];
+} catch (Throwable $e) {
+    $projects = [];
+}
+
 if (isset($_GET['id'])) {
-    $stmt = query('SELECT * FROM projects WHERE id = ?', [(int) $_GET['id']]);
-    $editing = $stmt ? $stmt->fetch_assoc() : null;
+    $editing = adminFetchOne('SELECT * FROM projects WHERE id = ?', [(int) $_GET['id']]);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $payload = [
-            $_POST['title_en'],
-            $_POST['title_sw'],
-            $_POST['summary_en'],
-            $_POST['summary_sw'],
-            $_POST['location'],
-            $_POST['status'],
-            $_POST['launched_on'],
+            trim((string) ($_POST['title_en'] ?? '')),
+            trim((string) ($_POST['title_sw'] ?? '')),
+            trim((string) ($_POST['summary_en'] ?? '')),
+            trim((string) ($_POST['summary_sw'] ?? '')),
+            trim((string) ($_POST['location'] ?? '')),
+            trim((string) ($_POST['status'] ?? '')),
+            trim((string) ($_POST['launched_on'] ?? '')),
         ];
 
-        $imagePath = null;
+        $imagePath = '';
         if (!empty($_FILES['image']['name'])) {
-            $imagePath = uploadImage($_FILES['image'], 'projects');
+            $imagePath = uploadImage($_FILES['image'], 'projects') ?: '';
         }
 
         if (!empty($_POST['id'])) {
             $id = (int) $_POST['id'];
-            if ($imagePath) {
-                $old = query('SELECT image_path FROM projects WHERE id = ?', [$id])->fetch_assoc();
+            if ($imagePath !== '') {
+                $old = adminFetchOne('SELECT image_path FROM projects WHERE id = ?', [$id]);
                 deleteMediaFile($old['image_path'] ?? null);
                 query(
                     'UPDATE projects SET title_en=?, title_sw=?, summary_en=?, summary_sw=?, location=?, status=?, launched_on=?, image_path=? WHERE id=?',
-                    [...$payload, $imagePath, $id]
+                    adminParams([...$payload, $imagePath, $id])
                 );
             } else {
                 query(
                     'UPDATE projects SET title_en=?, title_sw=?, summary_en=?, summary_sw=?, location=?, status=?, launched_on=? WHERE id=?',
-                    [...$payload, $id]
+                    adminParams([...$payload, $id])
                 );
             }
         } else {
             query(
                 'INSERT INTO projects (title_en, title_sw, summary_en, summary_sw, location, status, launched_on, image_path) VALUES (?,?,?,?,?,?,?,?)',
-                [...$payload, $imagePath]
+                adminParams([...$payload, $imagePath])
             );
         }
 
-        header('Location: projects.php?lang=' . currentLang());
+        header('Location: projects.php?lang=' . rawurlencode(currentLang()));
         exit;
     } catch (Throwable $e) {
         $error = $e->getMessage();

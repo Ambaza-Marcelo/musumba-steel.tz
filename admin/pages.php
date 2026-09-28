@@ -1,67 +1,69 @@
 <?php
 
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/../includes/helpers.php';
+declare(strict_types=1);
 
-$lang = currentLang();
+require_once __DIR__ . '/includes/bootstrap.php';
 
-$pagesResult = query('SELECT * FROM pages ORDER BY section, title_en');
-$pagesList = [];
-if ($pagesResult) {
-    while ($row = $pagesResult->fetch_assoc()) {
-        $pagesList[] = $row;
-    }
-}
+$error = '';
+$pagesList = adminFetchAll('SELECT * FROM pages ORDER BY section, title_en');
 $editing = null;
 
 if (isset($_GET['edit'])) {
-    $editing = getPage($_GET['edit']);
+    try {
+        $editing = getPage((string) $_GET['edit']);
+    } catch (Throwable $e) {
+        $editing = null;
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $data = [
-        'title_en' => $_POST['title_en'] ?? '',
-        'title_sw' => $_POST['title_sw'] ?? '',
-        'summary_en' => $_POST['summary_en'] ?? '',
-        'summary_sw' => $_POST['summary_sw'] ?? '',
-        'content_en' => $_POST['content_en'] ?? '',
-        'content_sw' => $_POST['content_sw'] ?? '',
-        'slug' => $_POST['slug'] ?? '',
-        'section' => $_POST['section'] ?? '',
-    ];
+    try {
+        $data = [
+            'title_en' => trim((string) ($_POST['title_en'] ?? '')),
+            'title_sw' => trim((string) ($_POST['title_sw'] ?? '')),
+            'summary_en' => (string) ($_POST['summary_en'] ?? ''),
+            'summary_sw' => (string) ($_POST['summary_sw'] ?? ''),
+            'content_en' => (string) ($_POST['content_en'] ?? ''),
+            'content_sw' => (string) ($_POST['content_sw'] ?? ''),
+            'slug' => trim((string) ($_POST['slug'] ?? '')),
+            'section' => trim((string) ($_POST['section'] ?? '')),
+        ];
 
-    if (!empty($_POST['id'])) {
-        query(
-            'UPDATE pages SET title_en=?, title_sw=?, summary_en=?, summary_sw=?, content_en=?, content_sw=?, section=?, updated_at=NOW() WHERE id=?',
-            [
-                $data['title_en'],
-                $data['title_sw'],
-                $data['summary_en'],
-                $data['summary_sw'],
-                $data['content_en'],
-                $data['content_sw'],
-                $data['section'],
-                (int) $_POST['id'],
-            ]
-        );
-    } else {
-        query(
-            'INSERT INTO pages (slug, title_en, title_sw, summary_en, summary_sw, content_en, content_sw, section) VALUES (?,?,?,?,?,?,?,?)',
-            [
-                $data['slug'],
-                $data['title_en'],
-                $data['title_sw'],
-                $data['summary_en'],
-                $data['summary_sw'],
-                $data['content_en'],
-                $data['content_sw'],
-                $data['section'],
-            ]
-        );
+        if (!empty($_POST['id'])) {
+            query(
+                'UPDATE pages SET title_en=?, title_sw=?, summary_en=?, summary_sw=?, content_en=?, content_sw=?, section=?, updated_at=NOW() WHERE id=?',
+                adminParams([
+                    $data['title_en'],
+                    $data['title_sw'],
+                    $data['summary_en'],
+                    $data['summary_sw'],
+                    $data['content_en'],
+                    $data['content_sw'],
+                    $data['section'],
+                    (int) $_POST['id'],
+                ])
+            );
+        } else {
+            query(
+                'INSERT INTO pages (slug, title_en, title_sw, summary_en, summary_sw, content_en, content_sw, section) VALUES (?,?,?,?,?,?,?,?)',
+                adminParams([
+                    $data['slug'],
+                    $data['title_en'],
+                    $data['title_sw'],
+                    $data['summary_en'],
+                    $data['summary_sw'],
+                    $data['content_en'],
+                    $data['content_sw'],
+                    $data['section'],
+                ])
+            );
+        }
+
+        header('Location: pages.php?lang=' . rawurlencode(currentLang()));
+        exit;
+    } catch (Throwable $e) {
+        $error = $e->getMessage();
     }
-
-    header('Location: pages.php?lang=' . currentLang());
-    exit;
 }
 
 ?>

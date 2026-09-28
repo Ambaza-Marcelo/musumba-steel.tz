@@ -1,84 +1,88 @@
 <?php
 
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/../includes/helpers.php';
+declare(strict_types=1);
 
-$lang = currentLang();
+require_once __DIR__ . '/includes/bootstrap.php';
+
+$error = null;
 
 // Ensure uploads directory exists
 $uploadsDir = __DIR__ . '/../uploads/publications/';
 if (!is_dir($uploadsDir)) {
-    mkdir($uploadsDir, 0755, true);
+    @mkdir($uploadsDir, 0755, true);
 }
 
 $typeFilter = $_GET['type'] ?? null;
-$publications = getPublications($typeFilter);
+$publications = [];
+try {
+    $publications = getPublications($typeFilter) ?: [];
+} catch (Throwable $e) {
+    $publications = [];
+}
+
 $editing = null;
 $editingImages = [];
 
 if (isset($_GET['id'])) {
-    $stmt = query('SELECT * FROM publications WHERE id = ?', [(int) $_GET['id']]);
-    $editing = $stmt ? $stmt->fetch_assoc() : null;
-    
+    $editing = adminFetchOne('SELECT * FROM publications WHERE id = ?', [(int) $_GET['id']]);
     if ($editing) {
-        // Get existing images
-        $imagesResult = query('SELECT * FROM publication_images WHERE publication_id = ? ORDER BY image_order, id', [(int) $_GET['id']]);
-        if ($imagesResult) {
-            $editingImages = $imagesResult->fetch_all(MYSQLI_ASSOC);
-        }
+        $editingImages = adminFetchAll(
+            'SELECT * FROM publication_images WHERE publication_id = ? ORDER BY image_order, id',
+            [(int) $_GET['id']]
+        );
     }
 }
 
 // Handle image deletion
 if (isset($_GET['delete_image'])) {
-    $imageId = (int) $_GET['delete_image'];
-    $imageResult = query('SELECT image_path, publication_id FROM publication_images WHERE id = ?', [$imageId]);
-    if ($imageResult && $image = $imageResult->fetch_assoc()) {
-        // Delete file
-        $filePath = __DIR__ . '/../' . $image['image_path'];
-        if (file_exists($filePath)) {
-            @unlink($filePath);
+    try {
+        $imageId = (int) $_GET['delete_image'];
+        $image = adminFetchOne('SELECT image_path, publication_id FROM publication_images WHERE id = ?', [$imageId]);
+        if ($image) {
+            $filePath = __DIR__ . '/../' . $image['image_path'];
+            if (is_file($filePath)) {
+                @unlink($filePath);
+            }
+            query('DELETE FROM publication_images WHERE id = ?', [$imageId]);
+            header('Location: publications.php?lang=' . rawurlencode(currentLang()) . '&id=' . (int) $image['publication_id']);
+            exit;
         }
-        // Delete from database
-        query('DELETE FROM publication_images WHERE id = ?', [$imageId]);
-        header('Location: publications.php?lang=' . currentLang() . '&id=' . $image['publication_id']);
-        exit;
+    } catch (Throwable $e) {
+        $error = $e->getMessage();
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $error = null;
-    
     try {
-    $payload = [
-        $_POST['type'],
-        $_POST['title_en'],
-        $_POST['title_sw'],
-        $_POST['body_en'],
-        $_POST['body_sw'],
-        $_POST['published_on'],
-        $_POST['attachment'] ?? null,
-    ];
+        $payload = [
+            trim((string) ($_POST['type'] ?? '')),
+            trim((string) ($_POST['title_en'] ?? '')),
+            trim((string) ($_POST['title_sw'] ?? '')),
+            (string) ($_POST['body_en'] ?? ''),
+            (string) ($_POST['body_sw'] ?? ''),
+            trim((string) ($_POST['published_on'] ?? '')),
+            trim((string) ($_POST['attachment'] ?? '')),
+        ];
 
-    if (!empty($_POST['id'])) {
-        query(
-            'UPDATE publications SET type=?, title_en=?, title_sw=?, body_en=?, body_sw=?, published_on=?, attachment=? WHERE id=?',
-            [...$payload, (int) $_POST['id']]
-        );
+        if (!empty($_POST['id'])) {
+            query(
+                'UPDATE publications SET type=?, title_en=?, title_sw=?, body_en=?, body_sw=?, published_on=?, attachment=? WHERE id=?',
+                adminParams([...$payload, (int) $_POST['id']])
+            );
             $publicationId = (int) $_POST['id'];
-    } else {
-        query(
-            'INSERT INTO publications (type, title_en, title_sw, body_en, body_sw, published_on, attachment) VALUES (?,?,?,?,?,?,?)',
-            $payload
-        );
+        } else {
+            query(
+                'INSERT INTO publications (type, title_en, title_sw, body_en, body_sw, published_on, attachment) VALUES (?,?,?,?,?,?,?)',
+                adminParams($payload)
+            );
             $connection = db();
-            $publicationId = $connection->insert_id;
+            $publicationId = (int) $connection->insert_id;
         }
 
         // Handle image uploads
         if (!empty($_FILES['images']['name'][0])) {
             $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-            $maxSize = 5 * 1024 * 1024; // 5MB
+            $maxSize = 20 * 1024 * 1024; // 20MB
             
             foreach ($_FILES['images']['name'] as $key => $filename) {
                 if ($_FILES['images']['error'][$key] === UPLOAD_ERR_OK) {
@@ -102,24 +106,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     if (move_uploaded_file($tmpName, $uploadPath)) {
                         // Get max order for this publication
-                        $orderResult = query('SELECT MAX(image_order) as max_order FROM publication_images WHERE publication_id = ?', [$publicationId]);
-                        $maxOrder = 0;
-                        if ($orderResult && $row = $orderResult->fetch_assoc()) {
-                            $maxOrder = (int) ($row['max_order'] ?? 0);
-                        }
+                        $orderRow = adminFetchOne(
+                            'SELECT MAX(image_order) as max_order FROM publication_images WHERE publication_id = ?',
+                            [$publicationId]
+                        );
+                        $maxOrder = (int) ($orderRow['max_order'] ?? 0);
                         
                         query(
                             'INSERT INTO publication_images (publication_id, image_path, image_order) VALUES (?, ?, ?)',
-                            [$publicationId, $relativePath, $maxOrder + 1]
+                            adminParams([$publicationId, $relativePath, $maxOrder + 1])
                         );
                     }
                 }
             }
         }
 
-        header('Location: publications.php?lang=' . currentLang());
-    exit;
-    } catch (Exception $e) {
+        header('Location: publications.php?lang=' . rawurlencode(currentLang()));
+        exit;
+    } catch (Throwable $e) {
         $error = t('admin.error_occurred') . ' ' . $e->getMessage();
     }
 }

@@ -12,7 +12,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $user = $stmt ? $stmt->fetch_assoc() : null;
 
     if ($user && password_verify($password, $user['password_hash'])) {
-        $_SESSION['user_id'] = $user['id'];
+        session_regenerate_id(true);
+        $_SESSION['user_id'] = (int) $user['id'];
+        $_SESSION['login_at'] = time();
         header('Location: dashboard.php');
         exit;
     }

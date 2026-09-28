@@ -275,6 +275,9 @@ include __DIR__ . '/includes/header.php';
         </div>
     </section>
 
+<?php elseif ($page === 'roof-designs' || $page === 'configurator'): ?>
+    <?php include __DIR__ . '/includes/configurator_view.php'; ?>
+
 <?php elseif (in_array($page, $productPages, true)): ?>
     <section class="page-content">
         <?php if ($pageData): ?>

@@ -20,7 +20,7 @@ $isHome = ($page === 'welcome');
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700&display=swap">
-    <link rel="stylesheet" href="assets/css/style.css?v=20260904t">
+    <link rel="stylesheet" href="assets/css/style.css?v=20260925a">
 </head>
 
 <body class="<?= $isHome ? 'is-home' : 'is-inner'; ?>">

@@ -2,20 +2,14 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/../includes/helpers.php';
-require_once __DIR__ . '/../includes/upload.php';
+require_once __DIR__ . '/includes/bootstrap.php';
 
-ensureMediaSchema();
-
-$lang = currentLang();
 $message = '';
 $error = '';
 $editing = null;
 
 if (isset($_GET['id'])) {
-    $stmt = query('SELECT * FROM testimonials WHERE id = ?', [(int) $_GET['id']]);
-    $editing = $stmt ? $stmt->fetch_assoc() : null;
+    $editing = adminFetchOne('SELECT * FROM testimonials WHERE id = ?', [(int) $_GET['id']]);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -52,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $quoteSw,
                 $rating,
                 'google',
-                $reviewedOn !== '' ? $reviewedOn : null,
+                $reviewedOn,
                 $sort,
                 $active,
             ];
@@ -60,12 +54,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($_POST['id'])) {
                 query(
                     'UPDATE testimonials SET name_en=?, name_sw=?, quote_en=?, quote_sw=?, rating=?, source=?, reviewed_on=?, sort_order=?, is_active=? WHERE id=?',
-                    [...$payload, (int) $_POST['id']]
+                    adminParams([...$payload, (int) $_POST['id']])
                 );
             } else {
                 query(
                     'INSERT INTO testimonials (name_en, name_sw, quote_en, quote_sw, rating, source, reviewed_on, sort_order, is_active) VALUES (?,?,?,?,?,?,?,?,?)',
-                    $payload
+                    adminParams($payload)
                 );
             }
 
@@ -77,14 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$reviews = [];
-try {
-    $result = query('SELECT * FROM testimonials ORDER BY sort_order, id DESC');
-    $reviews = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
-} catch (Throwable $e) {
-    $reviews = [];
-}
-
+$reviews = adminFetchAll('SELECT * FROM testimonials ORDER BY sort_order, id DESC');
 $googleUrl = getSetting('google_reviews_url');
 ?>
 <!DOCTYPE html>

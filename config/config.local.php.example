@@ -1,0 +1,10 @@
+<?php
+/**
+ * Production / local DB override (optional).
+ * Copy to config.local.php on the server and adjust if needed.
+ *
+ * define('DB_HOST', 'localhost');
+ * define('DB_NAME', 'your_db');
+ * define('DB_USER', 'your_user');
+ * define('DB_PASS', 'your_password');
+ */

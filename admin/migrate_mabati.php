@@ -1,12 +1,17 @@
 <?php
 /**
  * One-click Mabati-structure rebuild for Musumba Steel.
- * Open: /musumba_steel/admin/migrate_mabati.php
+ * Open: /musumba_steel/admin/migrate_mabati.php (admin login required)
  */
 declare(strict_types=1);
 
-// Allow local migration without login for setup convenience
-require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/includes/auth.php';
+
+if (!isAdmin()) {
+    http_response_code(403);
+    echo 'Access denied. Admin role required.';
+    exit;
+}
 
 header('Content-Type: text/html; charset=utf-8');
 

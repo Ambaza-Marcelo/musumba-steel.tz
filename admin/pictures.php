@@ -1,51 +1,56 @@
 <?php
 
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/../includes/helpers.php';
+declare(strict_types=1);
 
-$lang = currentLang();
+require_once __DIR__ . '/includes/bootstrap.php';
+
+$error = null;
 
 // Ensure uploads directory exists
 $uploadsDir = __DIR__ . '/../uploads/pictures/';
 if (!is_dir($uploadsDir)) {
-    mkdir($uploadsDir, 0755, true);
+    @mkdir($uploadsDir, 0755, true);
 }
 
-$pictures = getPictures();
-$editing = null;
+$pictures = [];
+try {
+    $pictures = getPictures() ?: [];
+} catch (Throwable $e) {
+    $pictures = [];
+}
 
+$editing = null;
 if (isset($_GET['id'])) {
-    $stmt = query('SELECT * FROM pictures WHERE id = ?', [(int) $_GET['id']]);
-    $editing = $stmt ? $stmt->fetch_assoc() : null;
+    $editing = adminFetchOne('SELECT * FROM pictures WHERE id = ?', [(int) $_GET['id']]);
 }
 
 // Handle deletion
 if (isset($_GET['delete'])) {
-    $pictureId = (int) $_GET['delete'];
-    $pictureResult = query('SELECT image_path FROM pictures WHERE id = ?', [$pictureId]);
-    if ($pictureResult && $picture = $pictureResult->fetch_assoc()) {
-        // Delete file
-        $filePath = __DIR__ . '/../' . $picture['image_path'];
-        if (file_exists($filePath)) {
-            @unlink($filePath);
+    try {
+        $pictureId = (int) $_GET['delete'];
+        $picture = adminFetchOne('SELECT image_path FROM pictures WHERE id = ?', [$pictureId]);
+        if ($picture) {
+            $filePath = __DIR__ . '/../' . $picture['image_path'];
+            if (is_file($filePath)) {
+                @unlink($filePath);
+            }
+            query('DELETE FROM pictures WHERE id = ?', [$pictureId]);
         }
-        // Delete from database
-        query('DELETE FROM pictures WHERE id = ?', [$pictureId]);
         header('Location: pictures.php?lang=' . $lang);
         exit;
+    } catch (Throwable $e) {
+        $error = $e->getMessage();
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $error = null;
-    
     try {
         $payload = [
-            $_POST['title_en'],
-            $_POST['title_sw'],
-            $_POST['description_en'] ?? '',
-            $_POST['description_sw'] ?? '',
-            $_POST['display_order'] ?? 0,
+            trim((string) ($_POST['title_en'] ?? '')),
+            trim((string) ($_POST['title_sw'] ?? '')),
+            (string) ($_POST['description_en'] ?? ''),
+            (string) ($_POST['description_sw'] ?? ''),
+            (int) ($_POST['display_order'] ?? 0),
         ];
 
         if (!empty($_POST['id'])) {
@@ -57,21 +62,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
                 $fileType = $_FILES['image']['type'];
                 $fileSize = $_FILES['image']['size'];
-                $maxSize = 10 * 1024 * 1024; // 10MB
+                $maxSize = 20 * 1024 * 1024; // 20MB
                 
                 if (!in_array($fileType, $allowedTypes)) {
                     throw new Exception('Invalid file type. Only JPG, PNG, GIF, WEBP allowed.');
                 }
                 
                 if ($fileSize > $maxSize) {
-                    throw new Exception('File size exceeds 10MB limit.');
+                    throw new Exception('File size exceeds 20MB limit.');
                 }
                 
                 // Delete old image
-                $oldResult = query('SELECT image_path FROM pictures WHERE id = ?', [$pictureId]);
-                if ($oldResult && $old = $oldResult->fetch_assoc()) {
+                $old = adminFetchOne('SELECT image_path FROM pictures WHERE id = ?', [$pictureId]);
+                if ($old && !empty($old['image_path'])) {
                     $oldPath = __DIR__ . '/../' . $old['image_path'];
-                    if (file_exists($oldPath)) {
+                    if (is_file($oldPath)) {
                         @unlink($oldPath);
                     }
                 }
@@ -88,13 +93,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 query(
                     'UPDATE pictures SET title_en=?, title_sw=?, description_en=?, description_sw=?, image_path=?, display_order=? WHERE id=?',
-                    [...$payload, $relativePath, $pictureId]
+                    adminParams([...$payload, $relativePath, $pictureId])
                 );
             } else {
                 // Update without changing image
                 query(
                     'UPDATE pictures SET title_en=?, title_sw=?, description_sw=?, description_en=?, display_order=? WHERE id=?',
-                    [...$payload, $pictureId]
+                    adminParams([...$payload, $pictureId])
                 );
             }
         } else {
@@ -104,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-            $maxSize = 10 * 1024 * 1024; // 10MB
+            $maxSize = 20 * 1024 * 1024; // 20MB
             
             // Handle multiple images upload
             $filesToProcess = [];
@@ -144,7 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 if ($file['size'] > $maxSize) {
-                    $errors[] = $file['name'] . ': File size exceeds 10MB limit.';
+                    $errors[] = $file['name'] . ': File size exceeds 20MB limit.';
                     continue;
                 }
                 
@@ -183,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         header('Location: pictures.php?lang=' . $lang);
         exit;
-    } catch (Exception $e) {
+    } catch (Throwable $e) {
         $error = t('admin.error_occurred') . ' ' . $e->getMessage();
     }
 }

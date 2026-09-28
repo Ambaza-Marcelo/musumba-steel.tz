@@ -1,66 +1,88 @@
 <?php
 
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/../includes/helpers.php';
-require_once __DIR__ . '/../includes/upload.php';
+declare(strict_types=1);
 
-ensureMediaSchema();
+require_once __DIR__ . '/includes/bootstrap.php';
 
-$lang = currentLang();
+$adminNavActive = 'services';
 $error = '';
-
-$services = getServices();
+$services = [];
 $editing = null;
 
+try {
+    $services = getServices() ?: [];
+} catch (Throwable $e) {
+    $error = 'Unable to load services.';
+    $services = [];
+}
+
 if (isset($_GET['id'])) {
-    $stmt = query('SELECT * FROM services WHERE id = ?', [(int) $_GET['id']]);
-    $editing = $stmt ? $stmt->fetch_assoc() : null;
+    $editing = adminFetchOne('SELECT * FROM services WHERE id = ?', [(int) $_GET['id']]);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $payload = [
-            $_POST['name_en'],
-            $_POST['name_sw'],
-            $_POST['description_en'],
-            $_POST['description_sw'],
-            $_POST['category'],
+            trim((string) ($_POST['name_en'] ?? '')),
+            trim((string) ($_POST['name_sw'] ?? '')),
+            trim((string) ($_POST['description_en'] ?? '')),
+            trim((string) ($_POST['description_sw'] ?? '')),
+            trim((string) ($_POST['category'] ?? 'residential-roofing')),
         ];
 
-        $imagePath = null;
+        if ($payload[0] === '' || $payload[1] === '') {
+            throw new InvalidArgumentException('Name EN and Name SW are required.');
+        }
+
+        $imagePath = '';
         if (!empty($_FILES['image']['name'])) {
-            $imagePath = uploadImage($_FILES['image'], 'products');
+            $imagePath = uploadImage($_FILES['image'], 'products') ?: '';
         }
 
         if (!empty($_POST['id'])) {
             $id = (int) $_POST['id'];
-            if ($imagePath) {
-                $old = query('SELECT image_path FROM services WHERE id = ?', [$id])->fetch_assoc();
-                deleteMediaFile($old['image_path'] ?? null);
-                query(
-                    'UPDATE services SET name_en=?, name_sw=?, description_en=?, description_sw=?, category=?, image_path=? WHERE id=?',
-                    [...$payload, $imagePath, $id]
-                );
+            if ($imagePath !== '') {
+                $old = adminFetchOne('SELECT image_path FROM services WHERE id = ?', [$id]);
+                if (!empty($old['image_path'])) {
+                    deleteMediaFile($old['image_path']);
+                }
+                try {
+                    query(
+                        'UPDATE services SET name_en=?, name_sw=?, description_en=?, description_sw=?, category=?, image_path=? WHERE id=?',
+                        adminParams([...$payload, $imagePath, $id])
+                    );
+                } catch (Throwable $e) {
+                    query(
+                        'UPDATE services SET name_en=?, name_sw=?, description_en=?, description_sw=?, category=? WHERE id=?',
+                        adminParams([...$payload, $id])
+                    );
+                }
             } else {
                 query(
                     'UPDATE services SET name_en=?, name_sw=?, description_en=?, description_sw=?, category=? WHERE id=?',
-                    [...$payload, $id]
+                    adminParams([...$payload, $id])
                 );
             }
         } else {
-            query(
-                'INSERT INTO services (name_en, name_sw, description_en, description_sw, category, image_path) VALUES (?,?,?,?,?,?)',
-                [...$payload, $imagePath]
-            );
+            try {
+                query(
+                    'INSERT INTO services (name_en, name_sw, description_en, description_sw, category, image_path) VALUES (?,?,?,?,?,?)',
+                    adminParams([...$payload, $imagePath])
+                );
+            } catch (Throwable $e) {
+                query(
+                    'INSERT INTO services (name_en, name_sw, description_en, description_sw, category) VALUES (?,?,?,?,?)',
+                    adminParams($payload)
+                );
+            }
         }
 
-        header('Location: services.php?lang=' . currentLang());
+        header('Location: services.php?lang=' . rawurlencode(currentLang()));
         exit;
     } catch (Throwable $e) {
         $error = $e->getMessage();
     }
 }
-
 ?>
 <!DOCTYPE html>
 <html lang="<?= $lang === 'sw' ? 'sw' : 'en'; ?>">
@@ -68,202 +90,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Services | Musumba Steel</title>
+    <title><?= htmlspecialchars(t('admin.services'), ENT_QUOTES, 'UTF-8'); ?> | Musumba Steel</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="../assets/css/style.css">
     <style>
-        body {
-            background: #f5f5f5;
-            font-family: 'Montserrat', sans-serif;
-        }
-
+        body { background: #f5f5f5; font-family: 'Montserrat', sans-serif; }
         .admin-header {
             background: linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%);
-            color: white;
-            padding: 2rem;
-            margin-bottom: 2rem;
+            color: white; padding: 2rem; margin-bottom: 2rem;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
-
-        .admin-header h1 {
-            margin: 0 0 1rem 0;
-            font-size: 1.8rem;
-        }
-
+        .admin-header h1 { margin: 0 0 1rem 0; font-size: 1.8rem; }
         .admin-header .user-info {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 1rem;
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 1rem;
         }
-
-        .admin-nav {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.75rem;
-            margin-top: 1rem;
-        }
-
+        .admin-nav { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
         .admin-nav a {
-            padding: 0.6rem 1.2rem;
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            text-decoration: none;
-            border-radius: 6px;
-            font-weight: 500;
-            transition: background 0.2s ease;
+            padding: 0.6rem 1.2rem; background: rgba(255, 255, 255, 0.1);
+            color: white; text-decoration: none; border-radius: 6px; font-weight: 500;
         }
-
-        .admin-nav a:hover {
-            background: var(--primary);
-            color: #111;
-        }
-
-        .admin-layout {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 0 2rem 2rem;
-        }
-
+        .admin-nav a:hover { background: var(--primary); color: #111; }
+        .admin-layout { max-width: 1400px; margin: 0 auto; padding: 0 2rem 2rem; }
         .dashboard-section {
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            border: 1px solid #e0e0e0;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-            margin-bottom: 2rem;
+            background: white; border-radius: 12px; padding: 1.5rem;
+            border: 1px solid #e0e0e0; margin-bottom: 2rem;
         }
-
         .dashboard-section h2 {
-            margin: 0 0 1rem 0;
-            color: #333;
-            font-size: 1.3rem;
-            border-bottom: 2px solid var(--primary);
-            padding-bottom: 0.5rem;
+            margin: 0 0 1rem 0; color: #333; font-size: 1.3rem;
+            border-bottom: 2px solid var(--primary); padding-bottom: 0.5rem;
         }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 0.85rem; text-align: left; border-bottom: 1px solid #eee; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+        label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.75rem; }
+        input, select, textarea {
+            width: 100%; margin-top: 0.35rem; padding: 0.7rem; border: 1px solid #ddd;
+            border-radius: 6px; font: inherit; box-sizing: border-box;
         }
-
-        table thead {
-            background: #f8f8f8;
-        }
-
-        table th {
-            padding: 1rem;
-            text-align: left;
-            font-weight: 600;
-            color: #333;
-            border-bottom: 2px solid #e0e0e0;
-        }
-
-        table td {
-            padding: 1rem;
-            border-bottom: 1px solid #f0f0f0;
-        }
-
-        table tbody tr:hover {
-            background: #fafafa;
-        }
-
-        table tbody tr:last-child td {
-            border-bottom: none;
-        }
-
-        table a {
-            color: var(--primary);
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        table a:hover {
-            color: var(--primary-dark);
-            text-decoration: underline;
-        }
-
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .form-full-width {
-            grid-column: 1 / -1;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-            color: #333;
-        }
-
-        input[type="text"],
-        select,
-        textarea {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 0.95rem;
-            font-family: inherit;
-            transition: border-color 0.2s ease;
-        }
-
-        input[type="text"]:focus,
-        select:focus,
-        textarea:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(244, 176, 0, 0.1);
-        }
-
-        textarea {
-            min-height: 120px;
-            resize: vertical;
-        }
-
-        .btn {
-            padding: 0.9rem 1.4rem;
-            border-radius: 6px;
-            text-decoration: none;
-            font-weight: 600;
-            border: none;
-            cursor: pointer;
-            font-size: 0.95rem;
-            transition: background 0.2s ease;
-        }
-
-        .btn.primary {
-            background: var(--primary);
-            color: #111;
-        }
-
-        .btn.primary:hover {
-            background: var(--primary-dark);
-        }
-
-        @media (max-width: 768px) {
-            .admin-layout {
-                padding: 0 1rem 1rem;
-            }
-
-            .admin-header {
-                padding: 1.5rem;
-            }
-
-            .form-grid {
-                grid-template-columns: 1fr;
-            }
-        }
+        textarea { min-height: 110px; }
+        .form-full-width { grid-column: 1 / -1; }
+        .btn { padding: 0.85rem 1.3rem; border: 0; border-radius: 6px; font-weight: 700; cursor: pointer; }
+        .btn.primary { background: var(--primary); color: #111; }
+        .err { background: #ffebee; color: #b00020; padding: 0.85rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
     </style>
 </head>
 
@@ -271,118 +140,103 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="admin-header">
         <div class="user-info">
             <div>
-                <h1><?= t('admin.services'); ?></h1>
-                <p style="margin: 0; opacity: 0.9;"><?= t('admin.manage_services'); ?></p>
+                <h1><?= htmlspecialchars(t('admin.services'), ENT_QUOTES, 'UTF-8'); ?></h1>
+                <p style="margin:0;opacity:.9"><?= htmlspecialchars(t('admin.manage_services'), ENT_QUOTES, 'UTF-8'); ?></p>
             </div>
-            <div style="display: flex; gap: 1rem; align-items: center;">
-                <div class="language-switch" style="display: flex; gap: 0.5rem;">
-                    <a class="<?= $lang === 'en' ? 'active' : ''; ?>" href="?lang=en<?= isset($_GET['id']) ? '&id=' . urlencode($_GET['id']) : ''; ?>" style="color: white; text-decoration: none; padding: 0.4rem 0.8rem; background: <?= $lang === 'en' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)'; ?>; border-radius: 4px; font-size: 0.9rem;">EN</a>
-                    <a class="<?= $lang === 'sw' ? 'active' : ''; ?>" href="?lang=sw<?= isset($_GET['id']) ? '&id=' . urlencode($_GET['id']) : ''; ?>" style="color: white; text-decoration: none; padding: 0.4rem 0.8rem; background: <?= $lang === 'sw' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)'; ?>; border-radius: 4px; font-size: 0.9rem;">SW</a>
-                </div>
-                <a href="../index.php?lang=<?= $lang; ?>" style="color: white; text-decoration: none; padding: 0.6rem 1.2rem; background: rgba(255,255,255,0.1); border-radius: 6px;"><?= t('admin.view_site'); ?></a>
+            <div style="display:flex;gap:1rem;align-items:center">
+                <a href="?lang=en" style="color:#fff;text-decoration:none;padding:.4rem .8rem;background:<?= $lang === 'en' ? 'rgba(255,255,255,.2)' : 'rgba(255,255,255,.1)'; ?>;border-radius:4px">EN</a>
+                <a href="?lang=sw" style="color:#fff;text-decoration:none;padding:.4rem .8rem;background:<?= $lang === 'sw' ? 'rgba(255,255,255,.2)' : 'rgba(255,255,255,.1)'; ?>;border-radius:4px">SW</a>
+                <a href="../index.php?lang=<?= htmlspecialchars($lang, ENT_QUOTES, 'UTF-8'); ?>" style="color:#fff;text-decoration:none;padding:.6rem 1.2rem;background:rgba(255,255,255,.1);border-radius:6px"><?= htmlspecialchars(t('admin.view_site'), ENT_QUOTES, 'UTF-8'); ?></a>
             </div>
         </div>
-        <nav class="admin-nav">
-            <a href="dashboard.php?lang=<?= $lang; ?>"><?= t('admin.dashboard'); ?></a>
-            <a href="pages.php?lang=<?= $lang; ?>"><?= t('admin.pages'); ?></a>
-            <a href="services.php?lang=<?= $lang; ?>" style="background: var(--primary); color: #111;"><?= t('admin.services'); ?></a>
-            <a href="homepage.php?lang=<?= $lang; ?>">Homepage Media</a>
-            <a href="projects.php?lang=<?= $lang; ?>"><?= t('admin.projects'); ?></a>
-            <a href="publications.php?lang=<?= $lang; ?>"><?= t('admin.publications'); ?></a>
-            <a href="pictures.php?lang=<?= $lang; ?>"><?= t('admin.pictures'); ?></a>
-            <a href="videos.php?lang=<?= $lang; ?>"><?= t('admin.videos'); ?></a>
-            <a href="contacts.php?lang=<?= $lang; ?>"><?= t('admin.contacts'); ?></a>
-            <a href="users.php?lang=<?= $lang; ?>"><?= t('admin.users'); ?></a>
-            <a href="logout.php"><?= t('admin.logout'); ?></a>
-        </nav>
+        <?php include __DIR__ . '/includes/nav.php'; ?>
     </div>
 
     <div class="admin-layout">
+        <?php if ($error !== ''): ?>
+            <div class="err"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></div>
+        <?php endif; ?>
+
         <section class="dashboard-section">
-            <h2><?= t('admin.services_list'); ?></h2>
-        <table>
-            <thead>
-                <tr>
-                        <th><?= t('admin.name_en'); ?></th>
-                        <th><?= t('admin.category'); ?></th>
-                        <th><?= t('admin.actions'); ?></th>
-                </tr>
-            </thead>
-            <tbody>
-                    <?php if (empty($services)): ?>
-                        <tr>
-                            <td colspan="3" style="text-align: center; color: #999; padding: 2rem;">
-                                <?= t('admin.no_services'); ?>
-                            </td>
-                        </tr>
-                    <?php else: ?>
-                <?php foreach ($services as $service): ?>
+            <h2><?= htmlspecialchars(t('admin.services_list'), ENT_QUOTES, 'UTF-8'); ?></h2>
+            <table>
+                <thead>
                     <tr>
-                        <td><?= htmlspecialchars($service['name_en']); ?></td>
-                                <td><?= htmlspecialchars(ucfirst(str_replace('-', ' ', $service['category']))); ?></td>
-                                <td><a href="?lang=<?= $lang; ?>&id=<?= $service['id']; ?>"><?= t('admin.edit'); ?></a></td>
+                        <th><?= htmlspecialchars(t('admin.name_en'), ENT_QUOTES, 'UTF-8'); ?></th>
+                        <th><?= htmlspecialchars(t('admin.category'), ENT_QUOTES, 'UTF-8'); ?></th>
+                        <th><?= htmlspecialchars(t('admin.actions'), ENT_QUOTES, 'UTF-8'); ?></th>
                     </tr>
-                <?php endforeach; ?>
+                </thead>
+                <tbody>
+                    <?php if (!$services): ?>
+                        <tr><td colspan="3" style="text-align:center;color:#999;padding:2rem"><?= htmlspecialchars(t('admin.no_services'), ENT_QUOTES, 'UTF-8'); ?></td></tr>
+                    <?php else: ?>
+                        <?php foreach ($services as $service): ?>
+                            <tr>
+                                <td><?= htmlspecialchars((string) ($service['name_en'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+                                <td><?= htmlspecialchars(ucfirst(str_replace('-', ' ', (string) ($service['category'] ?? ''))), ENT_QUOTES, 'UTF-8'); ?></td>
+                                <td><a href="?lang=<?= htmlspecialchars($lang, ENT_QUOTES, 'UTF-8'); ?>&id=<?= (int) ($service['id'] ?? 0); ?>"><?= htmlspecialchars(t('admin.edit'), ENT_QUOTES, 'UTF-8'); ?></a></td>
+                            </tr>
+                        <?php endforeach; ?>
                     <?php endif; ?>
-            </tbody>
-        </table>
+                </tbody>
+            </table>
         </section>
 
         <section class="dashboard-section">
-            <h2><?= $editing ? t('admin.edit_service') : t('admin.new_service'); ?></h2>
-            <?php if (!empty($error)): ?><p style="color:#b00020"><?= htmlspecialchars($error); ?></p><?php endif; ?>
-        <form method="post" enctype="multipart/form-data">
-            <input type="hidden" name="id" value="<?= $editing['id'] ?? ''; ?>">
+            <h2><?= htmlspecialchars($editing ? t('admin.edit_service') : t('admin.new_service'), ENT_QUOTES, 'UTF-8'); ?></h2>
+            <form method="post" enctype="multipart/form-data" action="services.php?lang=<?= htmlspecialchars($lang, ENT_QUOTES, 'UTF-8'); ?>">
+                <input type="hidden" name="id" value="<?= (int) ($editing['id'] ?? 0); ?>">
                 <div class="form-grid">
-            <label>
-                        <?= t('admin.name_en'); ?>
-                        <input type="text" name="name_en" value="<?= htmlspecialchars($editing['name_en'] ?? ''); ?>" required>
-            </label>
-            <label>
-                        <?= t('admin.name_sw'); ?>
-                        <input type="text" name="name_sw" value="<?= htmlspecialchars($editing['name_sw'] ?? ''); ?>" required>
-            </label>
-                    <label class="form-full-width">
-                <?= t('admin.description_en'); ?>
-                <textarea name="description_en"><?= htmlspecialchars($editing['description_en'] ?? ''); ?></textarea>
-            </label>
-                    <label class="form-full-width">
-                <?= t('admin.description_sw'); ?>
-                <textarea name="description_sw"><?= htmlspecialchars($editing['description_sw'] ?? ''); ?></textarea>
-            </label>
-            <label>
-                        <?= t('admin.category'); ?>
-                <select name="category" required>
-                    <?php
-                    $cats = [
-                        'residential-roofing' => 'Residential Roofing',
-                        'industrial-roofing' => 'Industrial Roofing',
-                        'flashings' => 'Flashings',
-                        'pipes-tubes' => 'Pipes & Tubes',
-                        'coated-steel' => 'Coated Steel',
-                        'roofings' => 'Roofings',
-                        'construction-materials' => 'Construction Materials',
-                    ];
-                    $cur = $editing['category'] ?? 'residential-roofing';
-                    foreach ($cats as $val => $label):
-                    ?>
-                    <option value="<?= $val; ?>" <?= $cur === $val ? 'selected' : ''; ?>><?= $label; ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
-            <label class="form-full-width">
-                Product image
-                <input type="file" name="image" accept="image/jpeg,image/png,image/webp,image/gif">
-                <?php if (!empty($editing['image_path']) && mediaUrl($editing['image_path'])): ?>
-                    <img src="../<?= htmlspecialchars(mediaUrl($editing['image_path'])); ?>" alt="" style="max-width:160px;margin-top:.5rem;display:block;border-radius:6px">
-                <?php endif; ?>
-            </label>
+                    <label><?= htmlspecialchars(t('admin.name_en'), ENT_QUOTES, 'UTF-8'); ?>
+                        <input type="text" name="name_en" required value="<?= htmlspecialchars((string) ($editing['name_en'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                    </label>
+                    <label><?= htmlspecialchars(t('admin.name_sw'), ENT_QUOTES, 'UTF-8'); ?>
+                        <input type="text" name="name_sw" required value="<?= htmlspecialchars((string) ($editing['name_sw'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
+                    </label>
+                    <label class="form-full-width"><?= htmlspecialchars(t('admin.description_en'), ENT_QUOTES, 'UTF-8'); ?>
+                        <textarea name="description_en"><?= htmlspecialchars((string) ($editing['description_en'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
+                    </label>
+                    <label class="form-full-width"><?= htmlspecialchars(t('admin.description_sw'), ENT_QUOTES, 'UTF-8'); ?>
+                        <textarea name="description_sw"><?= htmlspecialchars((string) ($editing['description_sw'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
+                    </label>
+                    <label><?= htmlspecialchars(t('admin.category'), ENT_QUOTES, 'UTF-8'); ?>
+                        <?php
+                        $cats = [
+                            'residential-roofing' => 'Residential Roofing',
+                            'industrial-roofing' => 'Industrial Roofing',
+                            'flashings' => 'Flashings',
+                            'pipes-tubes' => 'Pipes & Tubes',
+                            'coated-steel' => 'Coated Steel',
+                            'roofings' => 'Roofings',
+                            'construction-materials' => 'Construction Materials',
+                        ];
+                        $cur = (string) ($editing['category'] ?? 'residential-roofing');
+                        ?>
+                        <select name="category" required>
+                            <?php foreach ($cats as $val => $label): ?>
+                                <option value="<?= htmlspecialchars($val, ENT_QUOTES, 'UTF-8'); ?>"<?= $cur === $val ? ' selected' : ''; ?>><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8'); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <label class="form-full-width">Product image
+                        <input type="file" name="image" accept="image/jpeg,image/png,image/webp,image/gif">
+                        <?php
+                        $preview = '';
+                        try {
+                            $preview = mediaUrl($editing['image_path'] ?? '');
+                        } catch (Throwable $e) {
+                            $preview = '';
+                        }
+                        if ($preview):
+                        ?>
+                            <img src="../<?= htmlspecialchars($preview, ENT_QUOTES, 'UTF-8'); ?>" alt="" style="max-width:160px;margin-top:.5rem;display:block;border-radius:6px">
+                        <?php endif; ?>
+                    </label>
                 </div>
-                <button class="btn primary" type="submit"><?= t('admin.save'); ?></button>
-        </form>
+                <button class="btn primary" type="submit"><?= htmlspecialchars(t('admin.save'), ENT_QUOTES, 'UTF-8'); ?></button>
+            </form>
         </section>
     </div>
 </body>
-
 </html>
-

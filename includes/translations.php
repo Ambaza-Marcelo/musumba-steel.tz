@@ -385,6 +385,66 @@ return [
         'en' => 'Affiliations',
         'sw' => 'Ushirikiano',
     ],
+    'config.title' => [
+        'en' => 'Roof Design Configurator',
+        'sw' => 'Kibuni cha Paa',
+    ],
+    'config.lead' => [
+        'en' => 'Choose profile, gauge, finish and colour — get an instant estimate per sheet length.',
+        'sw' => 'Chagua profaili, unene, finish na rangi — pata bei ya haraka kwa urefu wa bati.',
+    ],
+    'config.profile' => [
+        'en' => 'Profile',
+        'sw' => 'Profaili',
+    ],
+    'config.choose_profile' => [
+        'en' => 'Select profile',
+        'sw' => 'Chagua profaili',
+    ],
+    'config.gauge' => [
+        'en' => 'Gauge (thickness)',
+        'sw' => 'Unene (Gauge)',
+    ],
+    'config.choose_gauge' => [
+        'en' => 'Select gauge',
+        'sw' => 'Chagua unene',
+    ],
+    'config.finish' => [
+        'en' => 'Finish',
+        'sw' => 'Finish',
+    ],
+    'config.choose_finish' => [
+        'en' => 'Select finish',
+        'sw' => 'Chagua finish',
+    ],
+    'config.color' => [
+        'en' => 'Colour',
+        'sw' => 'Rangi',
+    ],
+    'config.choose_color' => [
+        'en' => 'Choose a colour',
+        'sw' => 'Chagua rangi',
+    ],
+    'config.length' => [
+        'en' => 'Length (metres)',
+        'sw' => 'Urefu (mita)',
+    ],
+    'config.length_hint' => [
+        'en' => 'Enter a length between 0.1 m and 15 m.',
+        'sw' => 'Weka urefu kati ya 0.1 m na 15 m.',
+    ],
+    'config.estimated_price' => [
+        'en' => 'Estimated price',
+        'sw' => 'Bei inayokadiriwa',
+    ],
+    'config.price_meta' => [
+        'en' => 'Select options to calculate',
+        'sw' => 'Chagua chaguo ili kuhesabu',
+    ],
+    'config.request_quote' => [
+        'en' => 'Request a formal quote',
+        'sw' => 'Omba bei rasmi',
+    ],
     'home.design_cta' => [
         'en' => 'ROOF DESIGNS',
         'sw' => 'MIUNDO YA PAA',
@@ -919,8 +979,8 @@ return [
         'sw' => 'Picha (picha nyingi zinawezekana)',
     ],
     'admin.images_accepted' => [
-        'en' => 'Accepted formats: JPG, PNG, GIF, WEBP (max 5MB per image)',
-        'sw' => 'Miundo inayokubalika: JPG, PNG, GIF, WEBP (upeo 5MB kwa kila picha)',
+        'en' => 'Accepted formats: JPG, PNG, GIF, WEBP (max 20MB per image)',
+        'sw' => 'Miundo inayokubalika: JPG, PNG, GIF, WEBP (upeo 20MB kwa kila picha)',
     ],
     'admin.existing_images' => [
         'en' => 'Existing Images',

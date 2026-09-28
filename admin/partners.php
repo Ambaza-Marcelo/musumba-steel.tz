@@ -2,20 +2,14 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/../includes/helpers.php';
-require_once __DIR__ . '/../includes/upload.php';
+require_once __DIR__ . '/includes/bootstrap.php';
 
-ensureMediaSchema();
-
-$lang = currentLang();
 $message = '';
 $error = '';
 $editing = null;
 
 if (isset($_GET['id'])) {
-    $stmt = query('SELECT * FROM partners WHERE id = ?', [(int) $_GET['id']]);
-    $editing = $stmt ? $stmt->fetch_assoc() : null;
+    $editing = adminFetchOne('SELECT * FROM partners WHERE id = ?', [(int) $_GET['id']]);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -24,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($action === 'delete' && !empty($_POST['id'])) {
             $id = (int) $_POST['id'];
-            $old = query('SELECT logo_path FROM partners WHERE id = ?', [$id])->fetch_assoc();
+            $old = adminFetchOne('SELECT logo_path FROM partners WHERE id = ?', [$id]);
             deleteMediaFile($old['logo_path'] ?? null);
             query('DELETE FROM partners WHERE id = ?', [$id]);
             header('Location: partners.php?lang=' . $lang);
@@ -44,34 +38,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new RuntimeException('Partner name is required.');
         }
 
-        $logoPath = null;
+        $logoPath = '';
         if (!empty($_FILES['logo']['name'])) {
-            $logoPath = uploadImage($_FILES['logo'], 'partners');
+            $logoPath = uploadImage($_FILES['logo'], 'partners') ?: '';
         }
 
         if (!empty($_POST['id'])) {
             $id = (int) $_POST['id'];
-            if ($logoPath) {
-                $old = query('SELECT logo_path FROM partners WHERE id = ?', [$id])->fetch_assoc();
+            if ($logoPath !== '') {
+                $old = adminFetchOne('SELECT logo_path FROM partners WHERE id = ?', [$id]);
                 deleteMediaFile($old['logo_path'] ?? null);
                 query(
                     'UPDATE partners SET name=?, category=?, logo_path=?, website_url=?, sort_order=?, is_active=? WHERE id=?',
-                    [$name, $category, $logoPath, $website !== '' ? $website : null, $sort, $active, $id]
+                    adminParams([$name, $category, $logoPath, $website, $sort, $active, $id])
                 );
             } else {
                 query(
                     'UPDATE partners SET name=?, category=?, website_url=?, sort_order=?, is_active=? WHERE id=?',
-                    [$name, $category, $website !== '' ? $website : null, $sort, $active, $id]
+                    adminParams([$name, $category, $website, $sort, $active, $id])
                 );
             }
             $message = 'Partner updated.';
         } else {
-            if (!$logoPath) {
+            if ($logoPath === '') {
                 throw new RuntimeException('Please upload a logo image.');
             }
             query(
                 'INSERT INTO partners (name, category, logo_path, website_url, sort_order, is_active) VALUES (?,?,?,?,?,?)',
-                [$name, $category, $logoPath, $website !== '' ? $website : null, $sort, $active]
+                adminParams([$name, $category, $logoPath, $website, $sort, $active])
             );
             $message = 'Partner added.';
         }
@@ -87,13 +81,7 @@ if (isset($_GET['ok'])) {
     $message = 'Saved successfully.';
 }
 
-$partners = [];
-try {
-    $result = query('SELECT * FROM partners ORDER BY category, sort_order, id');
-    $partners = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
-} catch (Throwable $e) {
-    $partners = [];
-}
+$partners = adminFetchAll('SELECT * FROM partners ORDER BY category, sort_order, id');
 ?>
 <!DOCTYPE html>
 <html lang="<?= $lang === 'sw' ? 'sw' : 'en'; ?>">
